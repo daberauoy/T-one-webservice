@@ -10,6 +10,7 @@ ENV PATH=/opt/poetry/bin:$PATH
 
 COPY pyproject.toml poetry.lock README.md /workspace/
 COPY tone /workspace/tone
+COPY main.py /workspace/
 
 WORKDIR /workspace
 
@@ -42,4 +43,5 @@ USER python
 
 STOPSIGNAL SIGINT
 
-ENTRYPOINT ["uvicorn", "--host", "0.0.0.0", "--port", "8080", "--no-access-log", "tone.demo.website:app"]
+# ENTRYPOINT ["uvicorn", "--host", "0.0.0.0", "--port", "8080", "--no-access-log", "tone.demo.website:app"]
+ENTRYPOINT ["python", "main.py"]
