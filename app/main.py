@@ -22,17 +22,17 @@ logger = logging.getLogger("uvicorn.error")
 def load_model():
     global pipeline
     logger.info("Loading ASR pipeline")
-    try:
-        logger.info("Trying to load on CUDA..")
-        pipeline = StreamingCTCPipeline.from_hugging_face(device="cuda")
-        logger.info("Loaded on CUDA")
-    except Exception as e:
-        logger.warning(f"Failed loading on CUDA: {e}. Trying to load default..")
-        pipeline = StreamingCTCPipeline.from_hugging_face()
-        logger.info("Pipeline loaded")
+    # try:
+    #     logger.info("Trying to load on CUDA..")
+    #     pipeline = StreamingCTCPipeline.from_hugging_face(device="cuda")
+    #     logger.info("Loaded on CUDA")
+    # except Exception as e:
+    #     logger.warning(f"Failed loading on CUDA: {e}. Trying to load default..")
+    #     pipeline = StreamingCTCPipeline.from_hugging_face()
 
-    # pipeline = StreamingCTCPipeline.from_hugging_face()
-    # logger.info("ASR pipeline loaded")
+
+    pipeline = StreamingCTCPipeline.from_hugging_face()
+    logger.info("ASR pipeline loaded")
 
 
 @app.get("/")
