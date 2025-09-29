@@ -12,7 +12,8 @@ from typing_extensions import Self, TypeAlias
 
 from tone.decoder import BeamSearchCTCDecoder, DecoderType, GreedyCTCDecoder
 from tone.logprob_splitter import StreamingLogprobSplitter
-from tone.onnx_wrapper import StreamingCTCModel
+# from tone.onnx_wrapper import StreamingCTCModel
+from tone.onnx_wrapper_triton import StreamingCTCModel
 
 #triton imports
 from tone.triton_wrapper import TritonCTCModel

@@ -3,7 +3,10 @@ import tempfile
 import logging
 
 # from pydantic import BaseModel
-from tone import StreamingCTCPipeline, read_audio, read_example_audio
+# from tone import StreamingCTCPipeline, read_audio
+from tone.pipeline3gpt import StreamingCTCPipeline
+from tone.pipeline import StreamingCTCPipeline as fallbackStreamingCTCPipeline
+from tone import read_audio
 
 app = FastAPI()
 logger = logging.getLogger("uvicorn.error")
@@ -23,12 +26,12 @@ def load_model():
     global pipeline
     logger.info("Loading ASR pipeline")
     try:
-        logger.info("Trying to load on CUDA..")
-        pipeline = StreamingCTCPipeline.from_hugging_face(device="cuda")
-        logger.info("Loaded on CUDA")
-    except Exception as e:
-        logger.warning(f"Failed loading on CUDA: {e}. Trying to load default..")
+        logger.info("Trying to load from Triton..")
         pipeline = StreamingCTCPipeline.from_hugging_face()
+        logger.info("Loaded from Triton")
+    except Exception as e:
+        logger.warning(f"Failed loading from Triton: {e}. Trying to load default..")
+        pipeline = fallbackStreamingCTCPipeline.from_hugging_face()
         logger.info("Pipeline loaded")
 
     # pipeline = StreamingCTCPipeline.from_hugging_face()

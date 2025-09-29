@@ -1,4 +1,4 @@
-"""Module with a simple T-one pipeline CPU-only implementation."""
+"""Module with a simple T-one pipeline CPU-only implementation using Triton Inference Server."""
 
 from __future__ import annotations
 
@@ -12,10 +12,7 @@ from typing_extensions import Self, TypeAlias
 
 from tone.decoder import BeamSearchCTCDecoder, DecoderType, GreedyCTCDecoder
 from tone.logprob_splitter import StreamingLogprobSplitter
-from tone.onnx_wrapper import StreamingCTCModel
-
-#triton imports
-from tone.triton_wrapper import TritonCTCModel
+from tone.triton_wrapper import TritonCTCModel  # Измененный импорт
 
 
 @dataclass
@@ -35,10 +32,10 @@ class TextPhrase:
 
 
 class StreamingCTCPipeline:
-    """A streaming ASR pipeline for CTC-based models.
+    """A streaming ASR pipeline for CTC-based models using Triton Inference Server.
 
     This class orchestrates the entire speech recognition process. It takes raw
-    audio chunks, passes them to a streaming acoustic model to get
+    audio chunks, passes them to a streaming acoustic model via Triton server to get
     log-probabilities, splits the log-probabilities into sensible phrases based on
     silence, and decodes them into text.
 
@@ -49,22 +46,21 @@ class StreamingCTCPipeline:
 
     # Model was trained with left/right padding so it's necessary to add it to increase the recognition quality
     PADDING: int = 2400  # 300ms * 8KHz
-    CHUNK_SIZE: int = StreamingCTCModel.AUDIO_CHUNK_SAMPLES
+    CHUNK_SIZE: int = TritonCTCModel.AUDIO_CHUNK_SAMPLES  # Измененная ссылка
 
     InputType: TypeAlias = npt.NDArray[np.int32]
     OutputType: TypeAlias = "list[TextPhrase]"
     StateType: TypeAlias = tuple[npt.NDArray[np.float16], StreamingLogprobSplitter.StateType]
 
-# from triton
     @classmethod
     def from_triton_server(
-            cls,
-            url: str = "localhost:8000",
-            model_name: str = "ctc_acoustic_model",
-            model_version: str = "1",
-            *,
-            decoder_type: DecoderType = DecoderType.BEAM_SEARCH,
-            verbose: bool = False
+        cls,
+        url: str = "localhost:8000",
+        model_name: str = "streaming_acoustic",
+        model_version: str = "1",
+        *,
+        decoder_type: DecoderType = DecoderType.BEAM_SEARCH,
+        verbose: bool = False
     ) -> Self:
         """Creates a pipeline instance by connecting to Triton Inference Server.
 
@@ -99,16 +95,9 @@ class StreamingCTCPipeline:
 
     @classmethod
     def from_hugging_face(cls, *, decoder_type: DecoderType = DecoderType.BEAM_SEARCH) -> Self:
-        """Creates a pipeline instance by downloading artifacts from Hugging Face Hub.
-
-        Args:
-            decoder_type (DecoderType, optional): The decoding strategy to use.
-                Defaults to `DecoderType.BEAM_SEARCH`.
-
-        Returns:
-            An initialized `StreamingCTCPipeline` instance.
-
-        """
+        """Legacy method for backward compatibility - uses local ONNX model."""
+        # Для обратной совместимости, но рекомендуется использовать from_triton_server
+        from tone.onnx_wrapper import StreamingCTCModel
         model = StreamingCTCModel.from_hugging_face()
         logprob_splitter = StreamingLogprobSplitter()
         if decoder_type == DecoderType.GREEDY:
@@ -121,8 +110,15 @@ class StreamingCTCPipeline:
 
     @staticmethod
     def download_from_hugging_face(dir_path: str | Path, only_acoustic: bool = False) -> None:
-        """Download all artifacts from HaggingFace to local folder."""
+        """Download all artifacts from HuggingFace to local folder.
+
+        Note: For Triton deployment, you'll need to set up the model repository separately.
+        """
         dir_path = Path(dir_path)
+
+        # Для Triton нужно настроить model repository отдельно
+        # Этот метод остается для совместимости
+        from tone.onnx_wrapper import StreamingCTCModel
         copyfile(StreamingCTCModel.download_from_hugging_face(), dir_path / "model.onnx")
 
         if not only_acoustic:
@@ -130,8 +126,12 @@ class StreamingCTCPipeline:
 
     @classmethod
     def from_local(cls, dir_path: str | Path, *, decoder_type: DecoderType = DecoderType.BEAM_SEARCH) -> Self:
-        """Create StreamingCTCPipeline instance using artifacts from local folder."""
+        """Create StreamingCTCPipeline instance using artifacts from local folder.
+
+        Note: For Triton usage, prefer from_triton_server method.
+        """
         dir_path = Path(dir_path)
+        from tone.onnx_wrapper import StreamingCTCModel
         model = StreamingCTCModel.from_local(dir_path / "model.onnx")
         logprob_splitter = StreamingLogprobSplitter()
         if decoder_type == DecoderType.GREEDY:
@@ -144,7 +144,7 @@ class StreamingCTCPipeline:
 
     def __init__(
         self,
-        model: StreamingCTCModel,
+        model: TritonCTCModel,  # Измененный тип
         logprob_splitter: StreamingLogprobSplitter,
         decoder: GreedyCTCDecoder | BeamSearchCTCDecoder,
     ) -> None:
@@ -162,19 +162,23 @@ class StreamingCTCPipeline:
     ) -> tuple[OutputType, StateType]:
         """Perform online (streaming) CTC decoding on a 300 ms audio chunk.
 
-        Processes the given audio segment incrementally, updating and returning
-        the state for low-latency streaming.
+        Processes the given audio segment incrementally via Triton server,
+        updating and returning the state for low-latency streaming.
 
         Args:
-            audio_chunk (InputType): A 300 ms slice of audio (2400 samples) to decode.
-            state (StateType | None): Previous state, or None to initialize.
-            is_last (bool): Whether this is the final chunk of the input stream.
+            audio_chunk: A 300 ms slice of audio (2400 samples) to decode.
+            state: Previous state, or None to initialize.
+            is_last: Whether this is the final chunk of the input stream.
 
         Returns:
-            Tuple[OutputType, StateType]:
+            Tuple containing:
                 - Decoded output for this chunk.
                 - Updated state to pass into the next call.
 
+        Raises:
+            TypeError: If input types are incorrect
+            ValueError: If input shapes are invalid
+            RuntimeError: If Triton inference fails
         """
         if not isinstance(audio_chunk, np.ndarray):
             raise TypeError(f"Incorrect 'audio_chunk' type: expected np.ndarray, but got {type(audio_chunk)}")
@@ -183,27 +187,43 @@ class StreamingCTCPipeline:
         if not isinstance(state, (tuple, type(None))):
             raise TypeError(f"Incorrect 'state' type: expected tuple on None, but got {type(state)}")
 
-        frame_size, time_bias = StreamingCTCModel.FRAME_SIZE, StreamingCTCModel.MEAN_TIME_BIAS
+        frame_size, time_bias = TritonCTCModel.FRAME_SIZE, TritonCTCModel.MEAN_TIME_BIAS
 
+        # Извлекаем состояние модели и logprob splitter
         model_state = state[0] if state is not None else None
         logprob_state = state[1] if state is not None else None
 
-        logprobs, model_state_next = self.model.forward(audio_chunk[None, :, None], model_state)
-        logprob_phrases, logprob_state_next = self.logprob_splitter.forward(logprobs[0], logprob_state, is_last=is_last)
+        # Выполняем инференс через Triton сервер
+        try:
+            logprobs, model_state_next = self.model.forward(
+                audio_chunk[None, :, None],  # Добавляем batch и channel dimensions
+                model_state
+            )
+        except Exception as e:
+            raise RuntimeError(f"Triton inference failed in pipeline: {e}")
+
+        # Обрабатываем logprobs через splitter
+        logprob_phrases, logprob_state_next = self.logprob_splitter.forward(
+            logprobs[0],  # Убираем batch dimension
+            logprob_state,
+            is_last=is_last
+        )
+
+        # Декодируем фразы в текст
         phrases: list[TextPhrase] = []
         for logprob_phrase in logprob_phrases:
             text = self.decoder.forward(logprob_phrase.logprobs)
             start_time = max(
                 0,
                 round(
-                    logprob_phrase.start_frame * frame_size - time_bias - self.PADDING / StreamingCTCModel.SAMPLE_RATE,
+                    logprob_phrase.start_frame * frame_size - time_bias - self.PADDING / TritonCTCModel.SAMPLE_RATE,
                     2,
                 ),
             )
             end_time = max(
                 start_time,
                 round(
-                    logprob_phrase.end_frame * frame_size - time_bias - self.PADDING / StreamingCTCModel.SAMPLE_RATE,
+                    logprob_phrase.end_frame * frame_size - time_bias - self.PADDING / TritonCTCModel.SAMPLE_RATE,
                     2,
                 ),
             )
@@ -214,6 +234,7 @@ class StreamingCTCPipeline:
                     end_time=end_time,
                 ),
             )
+
         return (phrases, (model_state_next, logprob_state_next))
 
     def forward_offline(self, audio: InputType) -> OutputType:
@@ -222,25 +243,31 @@ class StreamingCTCPipeline:
         Processes the entire input in one shot without maintaining any state.
 
         Args:
-            audio (InputType): The full audio waveform to decode.
+            audio: The full audio waveform to decode.
 
         Returns:
-            OutputType: The decoded output for the entire segment.
+            The decoded output for the entire segment.
 
+        Raises:
+            TypeError: If input type is incorrect
+            ValueError: If input shape is invalid
         """
         if not isinstance(audio, np.ndarray):
             raise TypeError(f"Incorrect 'audio' type: expected np.ndarray, but got {type(audio)}")
         if audio.ndim != 1:
             raise ValueError(f"Shape of 'audio' must be (L,), but got {audio.shape}")
 
+        # Добавляем паддинг
         audio = np.pad(audio, (self.PADDING, self.PADDING))
 
-        # Add padding to fill the last chunk and split into chunks of size self.CHUNK_SIZE
+        # Добавляем паддинг для заполнения последнего чанка и разбиваем на чанки
         audio = np.pad(audio, (0, -len(audio) % self.CHUNK_SIZE))
         audio_chunks = np.split(audio, len(audio) // self.CHUNK_SIZE)
 
         outputs: StreamingCTCPipeline.OutputType = []
         state: StreamingCTCPipeline.StateType | None = None
+
+        # Обрабатываем все чанки последовательно
         for i, audio_chunk in enumerate(audio_chunks):
             output, state = self.forward(audio_chunk, state, is_last=i == len(audio_chunks) - 1)
             outputs.extend(output)
@@ -251,12 +278,29 @@ class StreamingCTCPipeline:
         """Finalize the pipeline by sending an empty chunk and processing any remaining logprobs.
 
         Args:
-            state (StateType | None): The current state of the pipeline.
+            state: The current state of the pipeline.
 
         Returns:
-            OutputType: The decoded output for the entire segment.
-            StateType: The final state of the pipeline.
+            Tuple containing:
+                - The decoded output for the entire segment.
+                - The final state of the pipeline.
 
         """
-        audio_chunk = np.zeros((StreamingCTCPipeline.CHUNK_SIZE,), dtype=np.int32)
+        audio_chunk = np.zeros((self.CHUNK_SIZE,), dtype=np.int32)
         return self.forward(audio_chunk, state, is_last=True)
+
+    def get_model_info(self) -> dict:
+        """Get information about the Triton model being used.
+
+        Returns:
+            dict: Model configuration and metadata
+        """
+        return self.model.get_model_config()
+
+    def get_server_info(self) -> dict:
+        """Get information about the Triton server.
+
+        Returns:
+            dict: Server metadata
+        """
+        return self.model.get_server_metadata()
