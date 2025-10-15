@@ -10,7 +10,7 @@ ENV PATH=/opt/poetry/bin:$PATH
 
 COPY pyproject.toml poetry.lock README.md /workspace/
 COPY tone /workspace/tone
-COPY main.py /workspace/
+COPY app /workspace/app
 
 WORKDIR /workspace
 
@@ -25,17 +25,23 @@ RUN set -ex \
 
 ENV PATH=/venv/bin:$PATH
 
-RUN set -ex \
-    && python -m tone download /models
+# RUN set -ex \
+#     && python -m tone download /models
 
 FROM python:3.10-slim
 
+# я поверю дипсику и поменяю workdir
+
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /venv /venv
-COPY --from=build /models /models
+COPY --from=build /workspace/app ./app
+# COPY --from=build /models /models
+WORKDIR /app
 
 ENV PATH=/venv/bin:$PATH
 # Set env variable LOAD_FROM_FOLDER to load model from a local folder instead of downloading from HuggingFace
-ENV LOAD_FROM_FOLDER=/models
+# ENV LOAD_FROM_FOLDER=/models
 
 RUN useradd -s /bin/bash python
 
@@ -43,5 +49,9 @@ USER python
 
 STOPSIGNAL SIGINT
 
+# CMD ["pwd"]
+# RUN cd home
+# CMD ["ls home"]
+ENTRYPOINT ["uvicorn", "--host", "0.0.0.0", "--port", "8080", "--no-access-log", "main:app"]
 # ENTRYPOINT ["uvicorn", "--host", "0.0.0.0", "--port", "8080", "--no-access-log", "tone.demo.website:app"]
-ENTRYPOINT ["python", "main.py"]
+# ENTRYPOINT ["python", "main.py"]

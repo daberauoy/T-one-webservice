@@ -1,7 +1,7 @@
 [project]
 name = "tone"
 version = "0.1.0"
-description = "A demonstration of T-one – a streaming CTC-based ASR pipeline for Russian"
+description = "implemenation of T-one using triton inference server and fastapi"
 authors = [
     {name = "T-Software DC"}
 ]
@@ -14,6 +14,12 @@ dependencies = [
     "onnxruntime (>=1.12.0,<2.0.0) ; python_version >= '3.10'",
     "pyctcdecode (>=0.2.0,<1.0.0)",
     "kenlm (>=0.2.0,<1.0.0)",
+    "pathlib (>=1.0.1,<2.0.0)",
+    "tritonclient[grpc,http] (>=2.61.0,<3.0.0)",
+    "fastapi (>=0.100.0,<1.0.0)",
+    "uvicorn[standard] (>=0.22.0,<1.0.0)",
+    "miniaudio (>=1.50,<2.0)",
+    "python-multipart (>=0.0.20,<0.0.21)"
 ]
 
 

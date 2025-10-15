@@ -12,3 +12,7 @@ dist/*
 .vscode
 .venv
 .DS_Store
+
+
+/test_check_model.py
+/app/outputs/

@@ -21,6 +21,7 @@ logging.getLogger("pyctcdecode").setLevel(logging.ERROR)
 
 
 LABELS = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя "
+HOTWORDS = ["трансимпериал", "империал", "транс империал"]
 
 
 class DecoderType(Enum):
@@ -130,4 +131,4 @@ class BeamSearchCTCDecoder:
             raise ValueError(f"Shape of 'logprobs' must be (L, 35), but got {logprobs.shape}")
         if logprobs.dtype != np.float32:
             raise ValueError(f"Incorrect dtype of 'logprobs': expected np.float32, but got {logprobs.dtype}")
-        return self._decoder.decode(logprobs, beam_width=200)  # type: ignore[arg-type]
+        return self._decoder.decode(logprobs, hotwords=HOTWORDS, hotword_weight=15.0, beam_width=200)  # type: ignore[arg-type]

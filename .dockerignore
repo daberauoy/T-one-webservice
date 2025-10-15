@@ -3,3 +3,7 @@
 .venv
 dist
 .git
+
+/test_check_model.py
+/app/outputs/
+/models
